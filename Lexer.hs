@@ -3,9 +3,10 @@ import Data.Char
 
 data Token = TokenEOF |
              TokenEOL | 
-             TokenID { lineNum :: Int , name :: String } |
- 	     TokenNum { lineNum :: Int , value :: Int } |
-             TokenStr { lineNum :: Int , text :: String }
+             TokenID { lineNum::Int , name::String } |
+ 	     TokenNum { lineNum::Int , value::Int } |
+             TokenStr { lineNum::Int , text::String } |
+             TokenPunc { lineNum::Int , symbol::String }
            deriving (Read, Show)
 
 lexer :: String -> [Token]
@@ -27,6 +28,7 @@ setLineNum n (TokenEOL) = TokenEOL
 setLineNum n (TokenID _ x) = TokenID n x
 setLineNum n (TokenNum _ x) = TokenNum n x
 setLineNum n (TokenStr _ x) = TokenStr n x
+setLineNum n (TokenPunc _ x) = TokenPunc n x
 
 readToken :: String -> (Token, String)
 readToken "" = (TokenEOF, "")
@@ -39,12 +41,12 @@ readToken ('"':cs) = (TokenStr 0 (fst x), snd x)
   where x = readStr "" cs
 readToken (c:cs) | isAlpha c || c == '_' = (TokenID 0 (fst x), snd x)
   where x = readID [c] cs
-readToken ('=':'=':cs) = (TokenID 0 "==", cs)
-readToken ('<':'=':cs) = (TokenID 0 "<=", cs)
-readToken ('>':'=':cs) = (TokenID 0 ">=", cs)
-readToken ('&':'&':cs) = (TokenID 0 "&&", cs)
-readToken ('|':'|':cs) = (TokenID 0 "||", cs)
-readToken (c:cs) = (TokenID 0 [c], cs)
+readToken ('=':'=':cs) = (TokenPunc 0 "==", cs)
+readToken ('<':'=':cs) = (TokenPunc 0 "<=", cs)
+readToken ('>':'=':cs) = (TokenPunc 0 ">=", cs)
+readToken ('&':'&':cs) = (TokenPunc 0 "&&", cs)
+readToken ('|':'|':cs) = (TokenPunc 0 "||", cs)
+readToken (c:cs) = (TokenPunc 0 [c], cs)
 
 skipComment :: String -> String
 skipComment ('\n':cs) = cs
