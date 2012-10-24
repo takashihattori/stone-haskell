@@ -1,8 +1,8 @@
 module Lexer where
 import Data.Char
 
-data Token = TokenEOF |
-             TokenEOL | 
+data Token = TokenEOF { lineNum::Int } |
+             TokenEOL { lineNum::Int } | 
              TokenID { lineNum::Int , name::String } |
  	     TokenNum { lineNum::Int , value::Int } |
              TokenStr { lineNum::Int , text::String } |
@@ -18,23 +18,24 @@ lexer' n cs = let x = readToken cs
                   remain = snd x
               in setLineNum n token :
                  case token of
-                   TokenEOF -> []
-                   TokenEOL -> lexer' (n+1) remain
+                   TokenEOF _ -> []
+                   TokenEOL _ -> lexer' (n+1) remain
                    _ -> lexer' n remain
 
 setLineNum :: Int -> Token -> Token
-setLineNum n (TokenEOF) = TokenEOF
-setLineNum n (TokenEOL) = TokenEOL
-setLineNum n (TokenID _ x) = TokenID n x
-setLineNum n (TokenNum _ x) = TokenNum n x
-setLineNum n (TokenStr _ x) = TokenStr n x
-setLineNum n (TokenPunc _ x) = TokenPunc n x
+setLineNum n t = t { lineNum = n }
+-- setLineNum n (TokenEOF) = TokenEOF
+-- setLineNum n (TokenEOL) = TokenEOL
+-- setLineNum n (TokenID _ x) = TokenID n x
+-- setLineNum n (TokenNum _ x) = TokenNum n x
+-- setLineNum n (TokenStr _ x) = TokenStr n x
+-- setLineNum n (TokenPunc _ x) = TokenPunc n x
 
 readToken :: String -> (Token, String)
-readToken "" = (TokenEOF, "")
-readToken ('\n':cs) = (TokenEOL, cs)
+readToken "" = (TokenEOF 0, "")
+readToken ('\n':cs) = (TokenEOL 0, cs)
 readToken (c:cs) | isSpace c = readToken cs
-readToken ('/':'/':cs) = (TokenEOL, skipComment cs)
+readToken ('/':'/':cs) = (TokenEOL 0, skipComment cs)
 readToken (c:cs) | isDigit c = (TokenNum 0 (read (fst x)::Int), snd x)
   where x = readNum [c] cs
 readToken ('"':cs) = (TokenStr 0 (fst x), snd x)
@@ -65,6 +66,7 @@ readStr cs1 ('\\':'\\': cs2) = readStr (cs1 ++ "\\") cs2
 readStr cs1 (c:cs2) = readStr (cs1 ++ [c]) cs2
 
 readID :: String -> String -> (String, String)
+readID cs "" = (cs, "")
 readID cs1 (c:cs2)
   | isAlpha c || c == '_' || isDigit c = readID (cs1 ++ [c]) cs2
   | otherwise = (cs1, c:cs2)
