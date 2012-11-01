@@ -15,7 +15,7 @@ data Assoc = AssocRight | AssocLeft
 
 precedence = [
   ("=", 1), 
-  ("==", 2), (">", 2),  ("<", 2),
+  ("==", 2), (">", 2),  ("<", 2), (">=", 2),  ("<=", 2),
   ("+", 3), ("-", 3), 
   ("*", 4), ("/", 4), ("%", 4) ]
 
@@ -25,28 +25,37 @@ associativity = [
   (3, AssocLeft),
   (4, AssocLeft) ]
 
-data ParseError = Err { errLine::Int , message::String }
+data StoneError = Err { errLine::Int , message::String }
 
-instance Error ParseError where
-  noMsg = Err 0 "Syntax Error"
+instance Error StoneError where
+  noMsg = Err 0 "Unknown Error"
   strMsg s = Err 0 s
 
-instance Show ParseError where
+instance Show StoneError where
   show e = "In line " ++ (show $ errLine e) ++ ", " ++ (message e)
   
-type ParseMonad = Either ParseError
+type StoneMonad = Either StoneError
 
-parseProgram :: [Token] -> ParseMonad (ASTree, [Token])
-parseProgram (TokenEOL _:ts) = return (EmptyState, ts)
-parseProgram (TokenPunc _ ";":ts) = return (EmptyState, ts)
-parseProgram ts = do (tree, t:remain) <- parseStatement ts
-                     case t of
-                       TokenEOL _ -> return (tree, remain)
-                       TokenPunc _ ";" -> return (tree, remain)
-                       otherwise -> throwError (Err (lineNum t)
-                                                "EOL or ';' expected")
+parseProgram :: [Token] -> StoneMonad (ASTree, [Token])
+parseProgram (TokenEOF _:ts) = return (EmptyState, [])
+parseProgram (TokenEOL _:ts) = parseProgram ts
+parseProgram (TokenPunc _ ";":ts) = parseProgram ts
+parseProgram ts =
+  do (tree1, t:ts1) <- parseStatement ts
+     case t of
+       _ | isSentenceEnd t ->
+         do (tree2, ts2) <- parseProgram ts1
+            case tree2 of
+              EmptyState -> return (tree1, ts1)
+              otherwise -> return (SeqState tree1 tree2, ts2)
+       TokenEOF _ -> return (tree1, [])
+       otherwise -> throwError (Err (lineNum t) ("Unexpected " ++ (show t)))
+  where
+    isSentenceEnd (TokenEOL _) = True
+    isSentenceEnd (TokenPunc _ ";") = True
+    isSentenceEnd _ = False
 
-parseStatement :: [Token] -> ParseMonad (ASTree, [Token])
+parseStatement :: [Token] -> StoneMonad (ASTree, [Token])
 parseStatement (TokenEOL _:ts) = parseStatement ts
 parseStatement (TokenID _ "if":ts1) =
   do (tree1, ts2) <- parseExpr ts1
@@ -63,32 +72,44 @@ parseStatement (TokenID _ "while":ts1) =
      return (WhileState tree1 tree2, ts3)
 parseStatement ts = parseSimple ts
 
-parseSimple :: [Token] -> ParseMonad (ASTree, [Token])
+parseSimple :: [Token] -> StoneMonad (ASTree, [Token])
 parseSimple (TokenEOL _:ts) = parseSimple ts
 parseSimple ts = parseExpr ts
 
-parseBlock :: [Token] -> ParseMonad (ASTree, [Token])
+parseBlock :: [Token] -> StoneMonad (ASTree, [Token])
 parseBlock (TokenEOL _:ts) = parseBlock ts
 parseBlock (TokenPunc _ "{":ts1) =
-  do (tree1, t:ts2) <- parseStatement ts1
+  do (tree1, t:ts2) <- parseBlock' ts1
      case t of
-       _ | isSentenceEnd t -> do (tree2, ts3) <- parseStatement ts2
-                                 return (SeqState tree1 tree2, ts3)
        TokenPunc _ "}" -> return (tree1, ts2)
        otherwise -> throwError (Err (lineNum t) "Missing '}'")
+parseBlock (t:_) = throwError (Err (lineNum t) "Block must begin with '{'")
+
+parseBlock' :: [Token] -> StoneMonad (ASTree, [Token])
+parseBlock' (TokenPunc line "}":ts) = return (EmptyState, TokenPunc line "}":ts)
+parseBlock' (TokenEOL _:ts) = parseBlock' ts
+parseBlock' (TokenPunc _ ";":ts) = parseBlock' ts
+parseBlock' ts =
+  do (tree1, t:ts1) <- parseStatement ts
+     case t of
+       _ | isSentenceEnd t ->
+         do (tree2, ts2) <- parseBlock' ts1
+            case tree2 of
+              EmptyState -> return (tree1, ts1)
+              otherwise -> return (SeqState tree1 tree2, ts2)
+       otherwise -> return (tree1, t:ts1)
   where
     isSentenceEnd (TokenEOL _) = True
     isSentenceEnd (TokenPunc _ ";") = True
     isSentenceEnd _ = False
-parseBlock (t:_) = throwError (Err (lineNum t) "Block must begin with '{'")
                    
-parseExpr :: [Token] -> ParseMonad (ASTree, [Token])
+parseExpr :: [Token] -> StoneMonad (ASTree, [Token])
 parseExpr (TokenEOL _:ts) = parseExpr ts
 parseExpr ts1 =
   do (tree, ts2) <- parseFactor ts1
      parseExpr' tree ts2
 
-parseExpr' :: ASTree -> [Token] -> ParseMonad (ASTree, [Token])
+parseExpr' :: ASTree -> [Token] -> StoneMonad (ASTree, [Token])
 parseExpr' tree1 (t1:ts1) =
   case isOperator t1 of
     Just p1 ->
@@ -98,7 +119,7 @@ parseExpr' tree1 (t1:ts1) =
     otherwise -> return (tree1, t1:ts1)
 
 parseExpr'' :: ASTree -> Token -> Int -> ASTree -> [Token] ->
-               ParseMonad (ASTree, [Token])
+               StoneMonad (ASTree, [Token])
 parseExpr'' tree1 t1 p1 tree2 (t2:ts2) =
   case isOperator t2 of
     Just p2 ->
@@ -122,7 +143,7 @@ isOperator :: Token -> Maybe Int
 isOperator (TokenPunc _ s) = lookup s precedence
 isOperator t = Nothing
 
-parseFactor :: [Token] -> ParseMonad (ASTree, [Token])
+parseFactor :: [Token] -> StoneMonad (ASTree, [Token])
 parseFactor (TokenEOL _:ts) = parseFactor ts
 parseFactor (t:ts1) =
   case t of
@@ -131,7 +152,7 @@ parseFactor (t:ts1) =
          return (UnaryOp t tree, ts2)
     otherwise -> parsePrimary (t:ts1)
 
-parsePrimary :: [Token] -> ParseMonad (ASTree, [Token])
+parsePrimary :: [Token] -> StoneMonad (ASTree, [Token])
 parsePrimary (TokenEOL _:ts) = parsePrimary ts
 parsePrimary (TokenPunc _ "(":ts1) =
   do (tree, t:ts2) <- parseExpr ts1

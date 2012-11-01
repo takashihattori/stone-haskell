@@ -54,6 +54,7 @@ skipComment ('\n':cs) = cs
 skipComment (c:cs) = skipComment cs
 
 readNum :: String -> String -> (String, String)
+readNum cs "" = (cs, "")
 readNum cs1 (c:cs2)
   | isDigit c = readNum (cs1 ++ [c]) cs2
   | otherwise = (cs1, c:cs2)
