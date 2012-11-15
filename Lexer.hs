@@ -7,7 +7,7 @@ data Token = TokenEOF { lineNum::Int } |
  	     TokenNum { lineNum::Int , value::Int } |
              TokenStr { lineNum::Int , text::String } |
              TokenPunc { lineNum::Int , symbol::String }
-           deriving (Read, Show)
+           deriving (Eq, Read, Show)
 
 lexer :: String -> [Token]
 lexer cs = lexer' 1 cs
