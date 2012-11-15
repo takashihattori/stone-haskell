@@ -40,7 +40,8 @@ readToken (c:cs) | isDigit c = (TokenNum 0 (read (fst x)::Int), snd x)
   where x = readNum [c] cs
 readToken ('"':cs) = (TokenStr 0 (fst x), snd x)
   where x = readStr "" cs
-readToken (c:cs) | isAlpha c || c == '_' = (TokenID 0 (fst x), snd x)
+readToken (c:cs)
+  | isAlpha c || c == '_' || c >= 'あ' = (TokenID 0 (fst x), snd x)
   where x = readID [c] cs
 readToken ('=':'=':cs) = (TokenPunc 0 "==", cs)
 readToken ('<':'=':cs) = (TokenPunc 0 "<=", cs)
@@ -69,7 +70,7 @@ readStr cs1 (c:cs2) = readStr (cs1 ++ [c]) cs2
 readID :: String -> String -> (String, String)
 readID cs "" = (cs, "")
 readID cs1 (c:cs2)
-  | isAlpha c || c == '_' || isDigit c = readID (cs1 ++ [c]) cs2
+  | isAlpha c || c == '_' || c >= 'あ' || isDigit c = readID (cs1 ++ [c]) cs2
   | otherwise = (cs1, c:cs2)
 
 

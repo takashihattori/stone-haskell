@@ -53,7 +53,7 @@ parseProgram ts =
        TokenEOF _ -> return (tree1, [])
        otherwise -> throwError (Err (lineNum t1) ("Unexpected " ++ (show t1)))
   where
-    parseToplevel (TokenID _ "def":ts) = parseDef ts
+    parseToplevel (TokenID _ "魔法少女":ts) = parseDef ts
     parseToplevel ts = parseStatement ts
     isSentenceEnd (TokenEOL _) = True
     isSentenceEnd (TokenPunc _ ";") = True
@@ -63,7 +63,7 @@ parseDef :: [Token] -> StoneMonad (ASTree, [Token])
 parseDef (TokenEOL _:ts) = parseDef ts
 parseDef (t:ts) =
   case t of
-    TokenID _ f -> do (params, ts1) <- parseParams ts
+    TokenID _ f -> do (params, _:ts1) <- parseParams ts
                       (block, ts2) <- parseBlock ts1
                       return (FuncDef t params block, ts2)
     otherwise -> throwError (Err (lineNum t) "No function name")
@@ -109,6 +109,7 @@ parseStatement ts = parseSimple ts
 
 parseSimple :: [Token] -> StoneMonad (ASTree, [Token])
 parseSimple (TokenEOL _:ts) = parseSimple ts
+parseSimple (TokenID {name = "契約しよう"} :ts) = parseSimple ts
 parseSimple ts =
   do (tree, t1:ts1) <- parseExpr ts
      case t1 of
