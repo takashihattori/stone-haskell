@@ -5,18 +5,26 @@ import FuncParser
 
 data Val = ValInt Int |
            ValStr String |
-           ValFun Env [Token] ASTree
-         deriving (Eq, Read, Show)
+           ValFun [Token] ASTree
+         deriving (Eq)
+
+instance Show Val where
+  show (ValInt num) = show num
+  show (ValStr str) = show str
+  show (ValFun arg body) = "<<func " ++ (show body) ++ " >>"
                   
-type Env = [[(String, Val)]]
+type Env = [ (String, Val) ]
+
+emptyEnv :: Env
+emptyEnv = []
 
 eval :: Env -> ASTree -> StoneMonad (Env, Val)
 eval e (ASLeaf (TokenNum _ n)) = return (e, ValInt n)
 eval e (ASLeaf (TokenStr _ s)) = return (e, ValStr s)
-eval e (ASLeaf (TokenID line var)) =
-  case (envLookup var e) of
+eval e (ASLeaf (TokenID line name)) =
+  case (lookup name e) of
     Just val -> return (e, val)
-    otherwise -> throwError (Err line ("Undefined variable " ++ var))
+    otherwise -> throwError (Err line ("Undefined variable " ++ name))
 eval e1 (UnaryOp (TokenPunc line "-") primary) =
   do (e2, val) <- eval e1 primary
      case val of
@@ -27,7 +35,7 @@ eval e1 (BinaryOp (TokenPunc line "+") left right) =
      (e3, valR) <- eval e2 right
      case (valL, valR) of
        (ValInt nL, ValInt nR) -> return (e3, ValInt (nL + nR))
-       otherwise -> return (e3, ValStr (toString valL ++ (toString valR)))
+       otherwise -> return (e3, ValStr (show valL ++ (show valR)))
 eval e1 (BinaryOp (TokenPunc line "=") left right) =
   case left of
     ASLeaf (TokenID _ var) ->
@@ -70,17 +78,17 @@ eval e1 (WhileState cond block) =
        ValInt 0 -> return (e2, ValInt 0)
        otherwise -> do (e3, valBlock) <- eval e2 block
                        eval e3 (WhileState cond block)
-eval e1 (FuncDef (TokenID {name = n}) params body) =
-  let f = ValFun e1 params body in
-  return (assign e1 n f, f)
+eval e (FuncDef (TokenID {name = n}) params body) =
+  let f = ValFun params body in
+  return (assign e n f, f)
 eval e1 (FuncApply func args) =
   do (e2, f) <- eval e1 func
      case f of
-       ValFun funenv params body ->
+       ValFun params body ->
          let (e3, argvals) = evalArg e2 args
              bindings = makeBindings params argvals
-         in do (_, val) <- eval (bindings:funenv) body
-               return (e3, val)
+         in do (e4, val) <- eval (bindings ++ e3) body
+               return (copyBack e3 bindings e4, val)
        otherwise -> throwError (Err 0 ("Not a function: " ++ (show func)))
   where
     evalArg e [] = (e, [])
@@ -91,34 +99,19 @@ eval e1 (FuncApply func args) =
     makeBindings [] [] = []
     makeBindings ((TokenID {name = n}):params) (v:vals) =
       (n, v) : makeBindings params vals
+    copyBack [] _ _ = []
+    copyBack ((name, orig) : bs) formal result =
+      case (lookup name formal) of
+        Just _ -> (name, orig) : (copyBack bs formal result)
+        Nothing ->
+          case (lookup name result) of
+            Just new -> (name, new) : (copyBack bs formal result)
+            Nothing -> (name, orig) : (copyBack bs formal result)
 eval e t = throwError (Err 0 ("Unimplemented " ++ (show t)))
-            
-envLookup :: String -> Env -> Maybe Val
-envLookup var [] = Nothing
-envLookup var (bindings:e) =
-  case (lookup var bindings) of
-    Just val -> Just val
-    otherwise -> envLookup var e
 
 assign :: Env -> String -> Val -> Env
-assign e var val =
-  case (envLookup var e) of
-    Just _ -> assign' e var val
-    otherwise -> putBinding e var val
-  where
-    assign' (bindings:e) var val =
-      case (lookup var bindings) of
-        Just _ -> (assign'' bindings var val):e
-        Nothing -> bindings:(assign' e var val)
-    assign'' ((var1, val1):bindings) var2 val2 =
-      if var1 == var2
-      then (var1, val2):bindings
-      else (var1, val1):(assign'' bindings var2 val2)
-
-putBinding :: Env -> String -> Val -> Env
-putBinding (top:e) var val =
-  ((var, val):top):e
-
-toString :: Val -> String
-toString (ValStr s) = s
-toString (ValInt n) = show n
+assign [] name val = [ (name, val) ]
+assign ((name1,val1):bs) name2 val2 =
+  if name1 == name2
+  then (name1,val2):bs
+  else (name1,val1):(assign bs name2 val2)
