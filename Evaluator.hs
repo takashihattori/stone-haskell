@@ -9,15 +9,16 @@ data Val = ValInt Int |
            ValExit ExitTag Val 
          deriving (Eq)
 
-data ExitTag = ExitFunc | ExitLoop
+data ExitTag = ExitFunc | ExitBreak | ExitCont
              deriving (Eq)
 
 instance Show Val where
   show (ValInt num) = show num
   show (ValStr str) = show str
   show (ValFun arg body) = "<<func " ++ (show body) ++ " >>"
-  show (ValExit ExitFunc val) = "<<return " ++ (show val) ++ " >>"
-  show (ValExit ExitLoop val) = "<<exit from loop >>"
+  show (ValExit ExitFunc val) = "<<return " ++ (show val) ++ ">>"
+  show (ValExit ExitBreak val) = "<<break from loop>>"
+  show (ValExit ExitCont val) = "<<continue to next loop>>"
                   
 type Env = [ (String, Val) ]
 
@@ -87,8 +88,12 @@ eval e1 (WhileState cond block) =
        otherwise -> do (e3, valBlock) <- eval e2 block
                        case valBlock of
                          ValExit ExitFunc _ -> return (e3, valBlock)
-                         ValExit ExitLoop v -> return (e3, v)
+                         ValExit ExitBreak v -> return (e3, v)
                          otherwise -> eval e3 (WhileState cond block)
+eval e BreakState =
+  return (e, ValExit ExitBreak (ValInt 0))
+eval e ContState =
+  return (e, ValExit ExitCont (ValInt 0))
 eval e1 (ReturnState expr) =
   do (e2, val) <- eval e1 expr
      return (e2, ValExit ExitFunc val)
@@ -105,7 +110,7 @@ eval e1 (FuncApply func args) =
                let e5 = copyBack e3 bindings e4 in
                  case v1 of
                    ValExit ExitFunc v2 -> return (e5, v2)
-                   ValExit ExitLoop _ -> throwError (Err 0 "Break or continue not in loop")
+                   ValExit _ _ -> throwError (Err 0 "Break or continue not in loop")
                    otherwise -> return (e5, v1)
        otherwise -> throwError (Err 0 ("Not a function: " ++ (show func)))
   where

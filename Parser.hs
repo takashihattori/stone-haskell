@@ -7,6 +7,7 @@ data ASTree = ASLeaf Token |
               SeqState { left::ASTree , right::ASTree } |
               IfState { cond::ASTree , thenblock::ASTree , elseblock::ASTree } |
               WhileState { cond::ASTree , body::ASTree } |
+              BreakState | ContState | 
               ReturnState { value::ASTree } |
               UnaryOp { op::Token , primary::ASTree } |
               BinaryOp { op::Token , left::ASTree , right::ASTree } |
@@ -103,6 +104,10 @@ parseStatement (TokenID _ "while":ts1) =
   do (tree1, ts2) <- parseExpr ts1
      (tree2, ts3) <- parseBlock ts2
      return (WhileState tree1 tree2, ts3)
+parseStatement (TokenID _ "break":ts) =
+  return (BreakState, ts)
+parseStatement (TokenID _ "continue":ts) =
+  return (ContState, ts)
 parseStatement (TokenID _ "def":ts) = parseDef ts
 parseStatement (TokenID _ "return":ts1) =
   do (tree, ts2) <- parseExpr ts1
