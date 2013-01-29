@@ -1,4 +1,4 @@
-module FuncParser where
+module Parser where
 import Control.Monad.Error
 import Lexer
 
@@ -43,7 +43,7 @@ parseProgram (TokenEOF _:ts) = return (EmptyState, [])
 parseProgram (TokenEOL _:ts) = parseProgram ts
 parseProgram (TokenPunc _ ";":ts) = parseProgram ts
 parseProgram ts =
-  do (tree1, t1:ts1) <- parseToplevel ts
+  do (tree1, t1:ts1) <- parseStatement ts
      case t1 of
        _ | isSentenceEnd t1 ->
          do (tree2, ts2) <- parseProgram ts1
@@ -52,12 +52,9 @@ parseProgram ts =
               otherwise -> return (SeqState tree1 tree2, ts2)
        TokenEOF _ -> return (tree1, [])
        otherwise -> throwError (Err (lineNum t1) ("Unexpected " ++ (show t1)))
-  where
-    parseToplevel (TokenID _ "def":ts) = parseDef ts
-    parseToplevel ts = parseStatement ts
-    isSentenceEnd (TokenEOL _) = True
-    isSentenceEnd (TokenPunc _ ";") = True
-    isSentenceEnd _ = False
+  -- where
+    -- parseToplevel (TokenID _ "def":ts) = parseDef ts
+    -- parseToplevel ts = parseStatement ts
 
 parseDef :: [Token] -> StoneMonad (ASTree, [Token])
 parseDef (TokenEOL _:ts) = parseDef ts
@@ -105,6 +102,7 @@ parseStatement (TokenID _ "while":ts1) =
   do (tree1, ts2) <- parseExpr ts1
      (tree2, ts3) <- parseBlock ts2
      return (WhileState tree1 tree2, ts3)
+parseStatement (TokenID _ "def":ts) = parseDef ts
 parseStatement ts = parseSimple ts
 
 parseSimple :: [Token] -> StoneMonad (ASTree, [Token])
@@ -143,10 +141,6 @@ parseBlock' ts =
               EmptyState -> return (tree1, ts1)
               otherwise -> return (SeqState tree1 tree2, ts2)
        otherwise -> return (tree1, t:ts1)
-  where
-    isSentenceEnd (TokenEOL _) = True
-    isSentenceEnd (TokenPunc _ ";") = True
-    isSentenceEnd _ = False
                    
 parseExpr :: [Token] -> StoneMonad (ASTree, [Token])
 parseExpr (TokenEOL _:ts) = parseExpr ts
@@ -240,3 +234,8 @@ parseArgList trees ts =
        case t1 of
          TokenPunc _ "," -> parseArgList trees' ts1
          otherwise -> return (trees', t1:ts1)
+
+isSentenceEnd :: Token -> Bool
+isSentenceEnd (TokenEOL _) = True
+isSentenceEnd (TokenPunc _ ";") = True
+isSentenceEnd _ = False

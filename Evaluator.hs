@@ -1,7 +1,7 @@
-module FuncEvaluator where
+module Evaluator where
 import Control.Monad.Error
 import Lexer
-import FuncParser
+import Parser
 
 data Val = ValInt Int |
            ValStr String |
