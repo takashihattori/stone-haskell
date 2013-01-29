@@ -1,4 +1,4 @@
-module FuncParser where
+module Parser where
 import Control.Monad.Error
 import Lexer
 
@@ -43,7 +43,7 @@ parseProgram (TokenEOF _:ts) = return (EmptyState, [])
 parseProgram (TokenEOL _:ts) = parseProgram ts
 parseProgram (TokenPunc _ ";":ts) = parseProgram ts
 parseProgram ts =
-  do (tree1, t1:ts1) <- parseToplevel ts
+  do (tree1, t1:ts1) <- parseStatement ts
      case t1 of
        _ | isSentenceEnd t1 ->
          do (tree2, ts2) <- parseProgram ts1
@@ -52,18 +52,12 @@ parseProgram ts =
               otherwise -> return (SeqState tree1 tree2, ts2)
        TokenEOF _ -> return (tree1, [])
        otherwise -> throwError (Err (lineNum t1) ("Unexpected " ++ (show t1)))
-  where
-    parseToplevel (TokenID _ "魔法少女":ts) = parseDef ts
-    parseToplevel ts = parseStatement ts
-    isSentenceEnd (TokenEOL _) = True
-    isSentenceEnd (TokenPunc _ ";") = True
-    isSentenceEnd _ = False
 
 parseDef :: [Token] -> StoneMonad (ASTree, [Token])
 parseDef (TokenEOL _:ts) = parseDef ts
 parseDef (t:ts) =
   case t of
-    TokenID _ f -> do (params, _:ts1) <- parseParams ts
+    TokenID _ f -> do (params, ts1) <- parseParams ts
                       (block, ts2) <- parseBlock ts1
                       return (FuncDef t params block, ts2)
     otherwise -> throwError (Err (lineNum t) "No function name")
@@ -105,15 +99,15 @@ parseStatement (TokenID _ "while":ts1) =
   do (tree1, ts2) <- parseExpr ts1
      (tree2, ts3) <- parseBlock ts2
      return (WhileState tree1 tree2, ts3)
+parseStatement (TokenID _ "結界":ts) = parseDef ts
 parseStatement ts = parseSimple ts
 
 parseSimple :: [Token] -> StoneMonad (ASTree, [Token])
 parseSimple (TokenEOL _:ts) = parseSimple ts
-parseSimple (TokenID {name = "契約しよう"} :ts) = parseSimple ts
 parseSimple ts =
   do (tree, t1:ts1) <- parseExpr ts
      case t1 of
-       _ | maybeArg t1 -> do (args, ts2) <- parseArgList [] (t1:ts1)
+       _ | maybeArg t1 -> do (args, t2:ts2) <- parseArgList [] (t1:ts1)
                              return (FuncApply tree args, ts2)
        otherwise -> return (tree, t1:ts1)
   where
@@ -144,10 +138,6 @@ parseBlock' ts =
               EmptyState -> return (tree1, ts1)
               otherwise -> return (SeqState tree1 tree2, ts2)
        otherwise -> return (tree1, t:ts1)
-  where
-    isSentenceEnd (TokenEOL _) = True
-    isSentenceEnd (TokenPunc _ ";") = True
-    isSentenceEnd _ = False
                    
 parseExpr :: [Token] -> StoneMonad (ASTree, [Token])
 parseExpr (TokenEOL _:ts) = parseExpr ts
@@ -241,3 +231,8 @@ parseArgList trees ts =
        case t1 of
          TokenPunc _ "," -> parseArgList trees' ts1
          otherwise -> return (trees', t1:ts1)
+
+isSentenceEnd :: Token -> Bool
+isSentenceEnd (TokenEOL _) = True
+isSentenceEnd (TokenPunc _ ";") = True
+isSentenceEnd _ = False

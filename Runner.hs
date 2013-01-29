@@ -1,6 +1,6 @@
 import Lexer
-import FuncParser
-import FuncEvaluator
+import Parser
+import Evaluator
 
 main = do cs <- getContents
           let x = parseProgram $ lexer cs
