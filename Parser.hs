@@ -7,6 +7,7 @@ data ASTree = ASLeaf Token |
               SeqState { left::ASTree , right::ASTree } |
               IfState { cond::ASTree , thenblock::ASTree , elseblock::ASTree } |
               WhileState { cond::ASTree , body::ASTree } |
+              ReturnState { value::ASTree } |
               UnaryOp { op::Token , primary::ASTree } |
               BinaryOp { op::Token , left::ASTree , right::ASTree } |
               FuncDef { fname::Token , params::[Token], body::ASTree } |
@@ -103,6 +104,9 @@ parseStatement (TokenID _ "while":ts1) =
      (tree2, ts3) <- parseBlock ts2
      return (WhileState tree1 tree2, ts3)
 parseStatement (TokenID _ "def":ts) = parseDef ts
+parseStatement (TokenID _ "return":ts1) =
+  do (tree, ts2) <- parseExpr ts1
+     return (ReturnState tree, ts2)
 parseStatement ts = parseSimple ts
 
 parseSimple :: [Token] -> StoneMonad (ASTree, [Token])

@@ -5,13 +5,19 @@ import Parser
 
 data Val = ValInt Int |
            ValStr String |
-           ValFun [Token] ASTree
+           ValFun [Token] ASTree |
+           ValExit ExitTag Val 
          deriving (Eq)
+
+data ExitTag = ExitFunc | ExitLoop
+             deriving (Eq)
 
 instance Show Val where
   show (ValInt num) = show num
   show (ValStr str) = show str
   show (ValFun arg body) = "<<func " ++ (show body) ++ " >>"
+  show (ValExit ExitFunc val) = "<<return " ++ (show val) ++ " >>"
+  show (ValExit ExitLoop val) = "<<exit from loop >>"
                   
 type Env = [ (String, Val) ]
 
@@ -65,8 +71,10 @@ eval e1 (BinaryOp (TokenPunc line op) left right)
 eval e (EmptyState) = return (e, ValInt 0)
 eval e1 (SeqState left right) =
   do (e2, valL) <- eval e1 left
-     (e3, valR) <- eval e2 right
-     return (e3, valR)
+     case valL of
+       (ValExit _ v) -> return (e2, valL)
+       otherwise -> do (e3, valR) <- eval e2 right
+                       return (e3, valR)
 eval e1 (IfState cond thenBlock elseBlock) =
   do (e2, valCond) <- eval e1 cond
      case valCond of
@@ -77,7 +85,13 @@ eval e1 (WhileState cond block) =
      case valCond of
        ValInt 0 -> return (e2, ValInt 0)
        otherwise -> do (e3, valBlock) <- eval e2 block
-                       eval e3 (WhileState cond block)
+                       case valBlock of
+                         ValExit ExitFunc _ -> return (e3, valBlock)
+                         ValExit ExitLoop v -> return (e3, v)
+                         otherwise -> eval e3 (WhileState cond block)
+eval e1 (ReturnState expr) =
+  do (e2, val) <- eval e1 expr
+     return (e2, ValExit ExitFunc val)
 eval e (FuncDef (TokenID {name = n}) params body) =
   let f = ValFun params body in
   return (assign e n f, f)
@@ -87,8 +101,12 @@ eval e1 (FuncApply func args) =
        ValFun params body ->
          let (e3, argvals) = evalArg e2 args
              bindings = makeBindings params argvals
-         in do (e4, val) <- eval (bindings ++ e3) body
-               return (copyBack e3 bindings e4, val)
+         in do (e4, v1) <- eval (bindings ++ e3) body
+               let e5 = copyBack e3 bindings e4 in
+                 case v1 of
+                   ValExit ExitFunc v2 -> return (e5, v2)
+                   ValExit ExitLoop _ -> throwError (Err 0 "Break or continue not in loop")
+                   otherwise -> return (e5, v1)
        otherwise -> throwError (Err 0 ("Not a function: " ++ (show func)))
   where
     evalArg e [] = (e, [])
